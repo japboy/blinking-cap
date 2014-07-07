@@ -7,7 +7,7 @@
 
 #define BUILT_IN_LED_PIN 7
 #define LED_PIN 6
-#define MIC_PIN 10
+#define MIC_PIN 9
 
 int16_t       capture[FFT_N];    // Audio capture buffer
 complex_t     bfly_buff[FFT_N];  // FFT "butterfly" buffer
@@ -24,7 +24,7 @@ int
   maxLvlAvg[8], // pseudo rolling averages for the prior few frames.
   colDiv[8];    // Used when filtering FFT output to 8 columns
 
-Adafruit_NeoPixel strip = Adafruit_NeoPixel(1, LED_PIN, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel strip = Adafruit_NeoPixel(2, LED_PIN, NEO_GRB + NEO_KHZ800);
 
 /*
 These tables were arrived at through testing, modeling and trial and error,
@@ -94,7 +94,7 @@ void setup() {
       colDiv[i] += pgm_read_byte(&data[j]);
   }
 
-  // Init ADC free-run mode; f = ( 16MHz/prescaler ) / 13 cycles/conversion 
+  // Init ADC free-run mode; f = ( 16MHz/prescaler ) / 13 cycles/conversion
   ADMUX  = MIC_PIN;     // Channel sel, right-adj, use AREF pin
   ADCSRA = _BV(ADEN)  | // ADC enable
            _BV(ADSC)  | // ADC start
@@ -172,19 +172,46 @@ void loop() {
 
   // DO SOMETHING HERE WITH `peak[range]`
   int h, s, b;
-  if (0 < peak[7] - peak[0]) {
+  if (0 < peak[7] - peak[0] && 0 < peak[7] - peak[6] && 0 < peak[7] - peak[5]) {
     // Highest range
+    //Serial.print("High ");
     h = 240;
-    s = peak[7] * 9;
-    b = peak[7] * 5;
+    s = 99 - peak[7];
+    b = peak[7] * peak[7];
     blink(50);
+  } else if (0 < peak[5] - peak[0] && 0 < peak[5] - peak[4] && 0 < peak[5] - peak[3]) {
+    //Serial.print("Medium1 ");
+    h = 120;
+    s = 99 - peak[7];
+    b = peak[7] * peak[7];
+  } else if (0 < peak[3] - peak[0] && 0 < peak[3] - peak[2] && 0 < peak[3] - peak[1]) {
+    //Serial.print("Medium2 ");
+    h = 60;
+    s = 99 - peak[7];
+    b = peak[7] * peak[7];
   } else {
     // Lowest range
+    //Serial.print("Low ");
     h = 0;
-    s = peak[0] * 9;
-    b = peak[0] * 5;
+    s = 99 - peak[0];
+    b = peak[0] * peak[0];
   }
   gradientColorWipe(h, s, b, 100);
+  Serial.print(peak[0]);
+  Serial.print(",");
+  Serial.print(peak[1]);
+  Serial.print(",");
+  Serial.print(peak[2]);
+  Serial.print(",");
+  Serial.print(peak[3]);
+  Serial.print(",");
+  Serial.print(peak[4]);
+  Serial.print(",");
+  Serial.print(peak[5]);
+  Serial.print(",");
+  Serial.print(peak[6]);
+  Serial.print(",");
+  Serial.println(peak[7]);
 
   // Every third frame, make the peak pixels drop by 1:
   if(++dotCount >= 3) {
@@ -212,12 +239,14 @@ ISR(ADC_vect) { // Audio-sampling interrupt
 void gradientColorWipe (int h, int s, int b, uint8_t wait) {
   int colors[3];
   H2R_HSBtoRGB(h, s, b, colors);
+/*
   Serial.print(colors[0]);
   Serial.print(",");
   Serial.print(colors[1]);
   Serial.print(",");
   Serial.print(colors[2]);
   Serial.println();
+*/
   uint32_t c = strip.Color(colors[0], colors[1], colors[2]);
   uint16_t i = 0, len = strip.numPixels();
   for (i = 0; i < len; i++) {
@@ -232,4 +261,32 @@ void blink (uint8_t wait) {
   delay(wait);
   digitalWrite(BUILT_IN_LED_PIN, LOW);
   delay(wait);
+}
+
+int findMax (byte array[], byte start, byte last) {
+  byte maximum, location;
+  maximum = array[start];
+  location = start;
+  for (byte i = start + 1; i < last; i++) {
+    if (array[i] > maximum) {
+      maximum = array[i];
+      location = i;
+    }
+  }
+  return location;
+}
+
+void swap (byte array[], byte a, byte b) {
+  byte temp, location;
+  temp = array[a];
+  array[a] = array[b];
+  array[b] = temp;
+}
+
+void sortDec (byte array[], byte size) {
+  byte location;
+  for (byte i = 0; i < size - 1; i++) {
+    location = findMax(array, i, size);
+    swap(array, i, location);
+  }
 }
